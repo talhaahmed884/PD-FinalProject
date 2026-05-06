@@ -18,17 +18,32 @@ void BoardGenerator::generateBoard(Board &board) {
             continue;
         }
 
-        if (!isValidInRow(randomRowIndex, randomClueValue, board)) {
-            continue;
-        }
-
-        if (!isValidInCol(randomColumnIndex, randomClueValue, board)) {
+        if (!isValidInGrid(randomRowIndex, randomColumnIndex, randomClueValue, board) || !isValidInRow(
+                randomRowIndex, randomClueValue, board) || !isValidInCol(randomColumnIndex, randomClueValue, board)) {
             continue;
         }
 
         board.setBoardValue(randomRowIndex, randomColumnIndex, randomClueValue);
         clusesAdded++;
     }
+}
+
+bool BoardGenerator::isValidInGrid(const int row, const int column, const int value, const Board &board) {
+    constexpr int gridSize = static_cast<int>(CommonConstants::GridSize);
+
+    const int startingRow = (row / gridSize) * gridSize;
+    const int startingCol = (column / gridSize) * gridSize;
+    const int endingRow = startingRow + gridSize;
+    const int endingCol = startingCol + gridSize;
+
+    for (int a = startingRow; a < endingRow; a++) {
+        for (int b = startingCol; b < endingCol; b++) {
+            if (board.getBoardValue(a, b) == value) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool BoardGenerator::isValidInRow(const int row, const int clueValue, const Board &board) {

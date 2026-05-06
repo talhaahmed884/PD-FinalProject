@@ -38,10 +38,12 @@ bool SerialSolver::solveGrid(Board &board) {
 }
 
 bool SerialSolver::isValid(const int row, const int column, const int value, const Board &board) {
-    const int startingRow = (row / 3) * 3;
-    const int startingCol = (column / 3) * 3;
-    const int endingRow = startingRow + 3;
-    const int endingCol = startingCol + 3;
+    constexpr int gridSize = static_cast<int>(CommonConstants::GridSize);
+
+    const int startingRow = (row / gridSize) * gridSize;
+    const int startingCol = (column / gridSize) * gridSize;
+    const int endingRow = startingRow + gridSize;
+    const int endingCol = startingCol + gridSize;
 
     return isValidInGrid(startingRow, startingCol, endingRow, endingCol, value, board) && isValidInRow(
                row, value, board) && isValidInCol(column, value, board);

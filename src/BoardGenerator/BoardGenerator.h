@@ -24,6 +24,8 @@ private:
 
     int getRandomBlockValue();
 
+    static bool isValidInGrid(int row, int column, int value, const Board &board);
+
     static bool isValidInRow(int row, int clueValue, const Board &board);
 
     static bool isValidInCol(int col, int clueValue, const Board &board);
