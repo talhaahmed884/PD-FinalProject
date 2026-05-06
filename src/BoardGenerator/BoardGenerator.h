@@ -3,6 +3,7 @@
 #pragma once
 
 #include <random>
+
 #include "../SudokuBoard/Board/Board.h"
 using namespace std;
 

@@ -1,9 +1,8 @@
 #include <iostream>
 
-#include "src/BoardGenerator/BoardGenerator.h"
-#include "src/BoardSolver/Solver.h"
-#include "src/BoardSolver/SerialSolver/SerialSolver.h"
-#include "src/SudokuBoard/Board/Board.h"
+#include "BoardGenerator/BoardGenerator.h"
+#include "BoardSolver/SerialSolver/SerialSolver.h"
+#include "SudokuBoard/Board/Board.h"
 using namespace std;
 
 int main() {

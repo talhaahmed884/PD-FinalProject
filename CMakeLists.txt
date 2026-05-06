@@ -3,7 +3,7 @@ project(PDC_FinalProject)
 
 set(CMAKE_CXX_STANDARD 26)
 
-add_executable(PDC_FinalProject main.cpp
+add_executable(PDC_FinalProject src/main.cpp
         src/SudokuBoard/Block/Block.cpp
         src/SudokuBoard/Block/Block.h
         src/SudokuBoard/Board/Board.cpp

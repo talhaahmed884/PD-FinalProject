@@ -1,5 +1,6 @@
 #include "SerialSolver.h"
-#include "iostream"
+
+#include <iostream>
 using namespace std;
 
 SerialSolver::SerialSolver() = default;

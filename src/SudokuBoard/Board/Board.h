@@ -5,7 +5,6 @@
 #include "../Block/Block.h"
 #include "../CommonConstants.h"
 
-
 class Board {
 public:
     Board();
