@@ -1,31 +1,102 @@
 #include "BoardGenerator.h"
 #include "../SudokuBoard/CommonConstants.h"
 
-BoardGenerator::BoardGenerator() : randomEngine(random_device{}()), indexDistribution(0, 8),
-                                   blockDistribution(1, 9) {
+#include <algorithm>
+#include <numeric>
+#include <vector>
+using namespace std;
+
+BoardGenerator::BoardGenerator() : randomEngine(random_device{}()) {
 }
 
 void BoardGenerator::generateBoard(Board &board) {
-    int clusesAdded = 0;
+    generateFullBoard(board);
 
-    while (clusesAdded < getNoOfClues()) {
-        const int randomRowIndex = getRandomIndex();
-        const int randomColumnIndex = getRandomIndex();
+    constexpr int boardSize = static_cast<int>(CommonConstants::BoardSize);
+    constexpr int totalCells = boardSize * boardSize;
 
-        const int randomClueValue = getRandomBlockValue();
+    vector<int> indices(totalCells);
+    iota(indices.begin(), indices.end(), 0);
+    shuffle(indices.begin(), indices.end(), randomEngine);
 
-        if (board.getBoardBlock(randomRowIndex, randomColumnIndex).getIsFilled()) {
-            continue;
+    int cluesRemaining = totalCells;
+
+    for (const int idx: indices) {
+        if (cluesRemaining <= getNoOfClues()) break;
+
+        const int row = idx / boardSize;
+        const int col = idx % boardSize;
+        const int savedValue = board.getBoardValue(row, col);
+
+        board.resetBoardBlock(row, col);
+
+        int count = 0;
+        countSolutions(board, count);
+
+        if (count == 1) {
+            cluesRemaining--;
+        } else {
+            board.setBoardValue(row, col, savedValue);
         }
-
-        if (!isValidInGrid(randomRowIndex, randomColumnIndex, randomClueValue, board) || !isValidInRow(
-                randomRowIndex, randomClueValue, board) || !isValidInCol(randomColumnIndex, randomClueValue, board)) {
-            continue;
-        }
-
-        board.setBoardValue(randomRowIndex, randomColumnIndex, randomClueValue);
-        clusesAdded++;
     }
+}
+
+bool BoardGenerator::generateFullBoard(Board &board) {
+    constexpr int boardSize = static_cast<int>(CommonConstants::BoardSize);
+
+    for (int row = 0; row < boardSize; row++) {
+        for (int col = 0; col < boardSize; col++) {
+            if (board.getBoardBlock(row, col).getIsFilled()) continue;
+
+            vector<int> values(boardSize);
+            iota(values.begin(), values.end(), 1);
+            shuffle(values.begin(), values.end(), randomEngine);
+
+            for (const int val: values) {
+                if (!isValidInGrid(row, col, val, board) || !isValidInRow(row, val, board) ||
+                    !isValidInCol(col, val, board))
+                    continue;
+
+                board.setBoardValue(row, col, val);
+
+                if (generateFullBoard(board)) return true;
+
+                board.resetBoardBlock(row, col);
+            }
+
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void BoardGenerator::countSolutions(Board &board, int &count) {
+    if (count >= 2) return;
+
+    constexpr int boardSize = static_cast<int>(CommonConstants::BoardSize);
+
+    for (int row = 0; row < boardSize; row++) {
+        for (int col = 0; col < boardSize; col++) {
+            if (board.getBoardBlock(row, col).getIsFilled()) continue;
+
+            for (int val = 1; val <= boardSize; val++) {
+                if (!isValidInGrid(row, col, val, board) || !isValidInRow(row, val, board) || !isValidInCol(col, val,
+                        board))
+                    continue;
+
+                board.setBoardValue(row, col, val);
+                countSolutions(board, count);
+                board.resetBoardBlock(row, col);
+
+                if (count >= 2) return;
+            }
+
+            return;
+        }
+    }
+
+    count++;
 }
 
 bool BoardGenerator::isValidInGrid(const int row, const int column, const int value, const Board &board) {
@@ -66,12 +137,4 @@ bool BoardGenerator::isValidInCol(const int col, const int clueValue, const Boar
 
 int BoardGenerator::getNoOfClues() {
     return static_cast<int>(CommonConstants::BoardClues);
-}
-
-int BoardGenerator::getRandomIndex() {
-    return indexDistribution(randomEngine);
-}
-
-int BoardGenerator::getRandomBlockValue() {
-    return blockDistribution(randomEngine);
 }

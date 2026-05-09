@@ -4,25 +4,28 @@
 #include "BoardSolver/OpenMPSolver/OpenMPSolver.h"
 #include "BoardSolver/SerialSolver/SerialSolver.h"
 #include "SudokuBoard/Board/Board.h"
+#include "CorrectnessChecker/CorrectnessChecker.h"
 using namespace std;
 
 int main() {
-    Board board = Board();
+    auto board = Board();
     board.print();
 
     cout << endl;
 
-    BoardGenerator generator = BoardGenerator();
+    auto generator = BoardGenerator();
     generator.generateBoard(board);
     board.print();
 
-    OpenMPSolver solver = OpenMPSolver();
-    // SerialSolver solver = SerialSolver();
+    auto solver = OpenMPSolver();
+    // auto solver = SerialSolver();
     solver.solve(board);
 
     cout << endl;
 
     board.print();
+
+    cout << endl << "Is board solved with a valid solution: " << CorrectnessChecker::check(board) << endl;
 
     return 0;
 }

@@ -17,12 +17,10 @@ public:
 
 private:
     mt19937 randomEngine;
-    uniform_int_distribution<int> indexDistribution;
-    uniform_int_distribution<int> blockDistribution;
 
-    int getRandomIndex();
+    bool generateFullBoard(Board &board);
 
-    int getRandomBlockValue();
+    static void countSolutions(Board &board, int &count);
 
     static bool isValidInGrid(int row, int column, int value, const Board &board);
 
