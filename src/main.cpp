@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "BoardGenerator/BoardGenerator.h"
+#include "BoardSolver/OpenMPSolver/OpenMPSolver.h"
 #include "BoardSolver/SerialSolver/SerialSolver.h"
 #include "SudokuBoard/Board/Board.h"
 using namespace std;
@@ -15,7 +16,8 @@ int main() {
     generator.generateBoard(board);
     board.print();
 
-    SerialSolver solver = SerialSolver();
+    OpenMPSolver solver = OpenMPSolver();
+    // SerialSolver solver = SerialSolver();
     solver.solve(board);
 
     cout << endl;
