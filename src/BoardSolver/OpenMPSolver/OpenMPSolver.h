@@ -5,8 +5,7 @@
 #include "../Solver.h"
 #include <atomic>
 
-class OpenMPSolver : public Solver
-{
+class OpenMPSolver : public Solver {
 public:
     explicit OpenMPSolver(int maxThreads = 0);
 
@@ -14,11 +13,16 @@ public:
 
 private:
     static bool solveGridParallel(Board &board, std::atomic<bool> &solved);
+
     static bool solveGridSerial(Board &board, std::atomic<bool> &solved);
+
     static bool isValid(int row, int column, int value, const Board &board);
+
     static bool isValidInGrid(int startingRow, int startingCol, int endingRow, int endingCol, int value,
                               const Board &board);
+
     static bool isValidInRow(int row, int value, const Board &board);
+
     static bool isValidInCol(int col, int value, const Board &board);
 
     int maxThreads;
