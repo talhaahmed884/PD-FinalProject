@@ -11,6 +11,7 @@ add_executable(PDC_FinalProject src/main.cpp
         src/BoardGenerator/BoardGenerator.cpp
         src/BoardGenerator/BoardGenerator.h
         src/SudokuBoard/CommonConstants.h
+        src/BoardGenerator/PuzzleBank.h
         src/BoardSolver/Solver.h
         src/BoardSolver/SerialSolver/SerialSolver.cpp
         src/BoardSolver/SerialSolver/SerialSolver.h
@@ -18,7 +19,11 @@ add_executable(PDC_FinalProject src/main.cpp
         src/BoardSolver/OpenMPSolver/OpenMPSolver.h
         src/CorrectnessChecker/CorrectnessChecker.cpp
         src/CorrectnessChecker/CorrectnessChecker.h
+        src/Benchmark/BenchmarkRunner.cpp
+        src/Benchmark/BenchmarkRunner.h
 )
+
+target_compile_definitions(PDC_FinalProject PRIVATE "PROJECT_ROOT=\"${CMAKE_SOURCE_DIR}\"")
 
 if (APPLE)
     set(CMAKE_PREFIX_PATH "/opt/homebrew/opt/libomp;/usr/local/opt/libomp" ${CMAKE_PREFIX_PATH})

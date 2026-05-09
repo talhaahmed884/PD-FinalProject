@@ -15,6 +15,8 @@ public:
 
     static int getNoOfClues();
 
+    static vector<Board> loadProblems(int count, int difficultyLevel);
+
 private:
     mt19937 randomEngine;
 
