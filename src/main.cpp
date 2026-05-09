@@ -3,6 +3,6 @@
 using namespace std;
 
 int main() {
-    BenchmarkRunner::run(PROJECT_ROOT, 100);
+    BenchmarkRunner::run(string(PROJECT_ROOT) + "/results", 100);
     return 0;
 }

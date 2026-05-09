@@ -14,6 +14,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <sys/stat.h>
 using namespace std;
 
 static constexpr int OPENMP_THREAD_COUNTS[] = {4, 8, 16};
@@ -32,7 +33,8 @@ static constexpr DifficultyConfig DIFFICULTIES[] = {
 };
 
 static string makeOutputPath(const string &outputDir) {
-    time_t now = time(nullptr);
+    mkdir(outputDir.c_str(), 0755);
+    const time_t now = time(nullptr);
     char buf[20];
     strftime(buf, sizeof(buf), "%Y%m%d_%H%M%S", localtime(&now));
     return outputDir + "/results_" + buf + ".csv";
