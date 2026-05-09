@@ -1,7 +1,6 @@
 #include "CorrectnessChecker.h"
 
 #include <iostream>
-#include <unordered_set>
 using namespace std;
 
 #include "../SudokuBoard/CommonConstants.h"
