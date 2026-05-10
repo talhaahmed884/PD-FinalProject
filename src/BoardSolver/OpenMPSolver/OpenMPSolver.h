@@ -12,7 +12,7 @@ public:
     void solve(Board &board) override;
 
 private:
-    static bool solveGridParallel(Board &board, std::atomic<bool> &solved, int depth);
+    static bool solveGridParallel(const Board &board, Board &solutionBoard, std::atomic<bool> &solved, int depth);
 
     static bool solveGridSerial(Board &board, std::atomic<bool> &solved);
 

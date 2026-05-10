@@ -15,23 +15,19 @@ OpenMPSolver::OpenMPSolver(int maxThreads) : maxThreads(maxThreads) {
 }
 
 void OpenMPSolver::solve(Board &board) {
-    // flag to indicate if the solution has been found, a shared atomic variable to flag
     std::atomic<bool> solved(false);
+    Board solutionBoard;
 
 #ifdef _OPENMP
-    // Parallelize the solving process using OpenMP tasks.
-    // Create threads to explore
 #pragma omp parallel
     {
-#pragma omp single nowait //Without single, all threads would start solving the grid independently resulting in wrong result
-
-
-
+#pragma omp single nowait
         {
-            // Only ONE thread starts recursively solving the grid.
-            // Other threads are immediately available for parallel tasks created by the first thread
-            solveGridParallel(board, solved, 0);
+            solveGridParallel(board, solutionBoard, solved, 0);
         }
+    }
+    if (solved.load()) {
+        board = solutionBoard;
     }
 #else
     solveGridSerial(board, solved);
@@ -40,63 +36,60 @@ void OpenMPSolver::solve(Board &board) {
 
 static constexpr int TASK_DEPTH_CUTOFF = 3;
 
-bool OpenMPSolver::solveGridParallel(Board &board, std::atomic<bool> &solved, const int depth) {
+bool OpenMPSolver::solveGridParallel(const Board &board, Board &solutionBoard,
+                                     std::atomic<bool> &solved, const int depth) {
+    if (solved.load()) return false;
+
     int row = -1;
     int col = -1;
 
     if (!findMRVCell(board, row, col)) {
-        solved = true;
+        // No empty cells — board is fully solved; claim the solution slot
+#pragma omp critical
+        {
+            if (!solved.exchange(true)) {
+                solutionBoard = board;
+            }
+        }
         return true;
     }
 
-    // Snapshot board before spawning any tasks — tasks get a firstprivate copy of this snapshot,
-    // so `board` is never read concurrently while another task writes it in the critical section
+    // `board` is const from here on — tasks never write to it.
+    // Each task gets a firstprivate copy of this snapshot to explore independently.
     const Board snapshot = board;
 
-    bool solvedHere = false;
-    // Create a synchronization region for tasks created in this loop
 #pragma omp taskgroup
     {
-        // try all possible values for the current empty cell
         for (int value = 1; value <= static_cast<int>(CommonConstants::BoardSize); value++) {
-            if (solved.load()) {
-                continue;
-            }
+            if (solved.load()) break;
+            if (!isValid(row, col, value, snapshot)) continue;
 
-            if (!isValid(row, col, value, snapshot)) {
-                continue;
-            }
-            // Each task gets its own private copy of snapshot to explore independently
-#pragma omp task firstprivate(row, col, value, depth, snapshot) shared(board, solved, solvedHere)
+#pragma omp task firstprivate(row, col, value, depth, snapshot) shared(solutionBoard, solved)
             {
-                Board candidate = snapshot;
-                candidate.setBoardValue(row, col, value);
+                if (!solved.load()) {
+                    Board candidate = snapshot;
+                    candidate.setBoardValue(row, col, value);
 
-                bool branchSolved;
-                // Only spawn new tasks while below the cutoff depth; beyond that fall back to serial DFS
-                if (depth + 1 < TASK_DEPTH_CUTOFF) {
-                    branchSolved = solveGridParallel(candidate, solved, depth + 1);
-                } else {
-                    branchSolved = solveGridSerial(candidate, solved);
-                }
-
-                if (branchSolved) {
-                    // Protects shared board update — only the first task to finish updates the board
+                    if (depth + 1 < TASK_DEPTH_CUTOFF) {
+                        // Recurse: inner call writes directly to solutionBoard when it finds a solution
+                        solveGridParallel(candidate, solutionBoard, solved, depth + 1);
+                    } else {
+                        // Serial fallback: candidate is task-private, no sharing
+                        if (solveGridSerial(candidate, solved)) {
 #pragma omp critical
-                    {
-                        if (!solvedHere) {
-                            board = candidate;
-                            solvedHere = true;
+                            {
+                                if (!solved.exchange(true)) {
+                                    solutionBoard = candidate;
+                                }
+                            }
                         }
                     }
-                    // Signal remaining tasks to abandon their branches
-                    solved = true;
                 }
             }
         }
     }
 
-    return solvedHere;
+    return solved.load();
 }
 
 bool OpenMPSolver::solveGridSerial(Board &board, std::atomic<bool> &solved) {
