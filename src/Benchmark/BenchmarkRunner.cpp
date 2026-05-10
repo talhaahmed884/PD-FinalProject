@@ -102,12 +102,6 @@ BenchmarkResult BenchmarkRunner::benchmarkOpenMP(const Board &board, const strin
     OpenMPSolver solver(threads);
 
 #ifdef _OPENMP
-#pragma omp parallel
-    {
-    }
-#endif
-
-#ifdef _OPENMP
     const double startSec = omp_get_wtime();
     solver.solve(copy);
     const double timeSec = omp_get_wtime() - startSec;
