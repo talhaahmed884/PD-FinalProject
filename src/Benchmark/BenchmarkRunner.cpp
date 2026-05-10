@@ -15,9 +15,12 @@
 #include <iostream>
 #include <sstream>
 #include <sys/stat.h>
+#include <vector>
 using namespace std;
 
 static constexpr int OPENMP_THREAD_COUNTS[] = {4, 8, 16};
+
+static constexpr int REPETITIONS = 5;
 
 struct DifficultyConfig {
     int level;
@@ -46,6 +49,7 @@ static void printRow(const BenchmarkResult &r) {
             << r.difficulty << ","
             << r.algorithm << ","
             << r.threads << ","
+            << r.rep << ","
             << r.timeSec << ","
             << r.correct << "\n";
 }
@@ -55,7 +59,7 @@ void BenchmarkRunner::run(const string &outputDir, const int puzzleCount) {
 
     vector<BenchmarkResult> results;
 
-    cout << "Board_ID,Difficulty,Algorithm,Threads,Time_s,Correct\n";
+    cout << "Board_ID,Difficulty,Algorithm,Threads,Rep,Time_s,Correct\n";
 
     for (const auto &diff: DIFFICULTIES) {
         const vector<Board> boards = BoardGenerator::loadProblems(puzzleCount, diff.level);
@@ -65,14 +69,16 @@ void BenchmarkRunner::run(const string &outputDir, const int puzzleCount) {
             oss << diff.prefix << "_" << setw(3) << setfill('0') << (i + 1);
             const string boardId = oss.str();
 
-            BenchmarkResult serial = benchmarkSerial(boards[i], boardId, diff.name);
-            printRow(serial);
-            results.push_back(serial);
+            for (const auto &r: benchmarkSerial(boards[i], boardId, diff.name)) {
+                printRow(r);
+                results.push_back(r);
+            }
 
             for (const int t: OPENMP_THREAD_COUNTS) {
-                BenchmarkResult omp = benchmarkOpenMP(boards[i], boardId, diff.name, t);
-                printRow(omp);
-                results.push_back(omp);
+                for (const auto &r: benchmarkOpenMP(boards[i], boardId, diff.name, t)) {
+                    printRow(r);
+                    results.push_back(r);
+                }
             }
         }
     }
@@ -81,43 +87,50 @@ void BenchmarkRunner::run(const string &outputDir, const int puzzleCount) {
     cout << "\nResults written to " << outputPath << "\n";
 }
 
-BenchmarkResult BenchmarkRunner::benchmarkSerial(const Board &board, const string &boardId,
-                                                 const string &difficulty) {
-    Board copy = board;
+vector<BenchmarkResult> BenchmarkRunner::benchmarkSerial(const Board &board, const string &boardId,
+                                                         const string &difficulty) {
     SerialSolver solver;
+    vector<BenchmarkResult> results;
+    results.reserve(REPETITIONS);
 
-    const auto start = chrono::high_resolution_clock::now();
-    solver.solve(copy);
-    const auto end = chrono::high_resolution_clock::now();
-
-    const double timeSec = chrono::duration<double>(end - start).count();
-    const int correct = CorrectnessChecker::check(copy) ? 1 : 0;
-
-    return {boardId, difficulty, "Serial", 1, timeSec, correct};
+    for (int rep = 1; rep <= REPETITIONS; rep++) {
+        Board copy = board;
+        const auto start = chrono::high_resolution_clock::now();
+        solver.solve(copy);
+        const auto end = chrono::high_resolution_clock::now();
+        const double timeSec = chrono::duration<double>(end - start).count();
+        const int correct = CorrectnessChecker::check(copy) ? 1 : 0;
+        results.push_back({boardId, difficulty, "Serial", 1, rep, timeSec, correct});
+    }
+    return results;
 }
 
-BenchmarkResult BenchmarkRunner::benchmarkOpenMP(const Board &board, const string &boardId,
-                                                 const string &difficulty, const int threads) {
-    Board copy = board;
+vector<BenchmarkResult> BenchmarkRunner::benchmarkOpenMP(const Board &board, const string &boardId,
+                                                         const string &difficulty, const int threads) {
     OpenMPSolver solver(threads);
+    vector<BenchmarkResult> results;
+    results.reserve(REPETITIONS);
 
+    for (int rep = 1; rep <= REPETITIONS; rep++) {
+        Board copy = board;
 #ifdef _OPENMP
-    const double startSec = omp_get_wtime();
-    solver.solve(copy);
-    const double timeSec = omp_get_wtime() - startSec;
+        const double start = omp_get_wtime();
+        solver.solve(copy);
+        const double timeSec = omp_get_wtime() - start;
 #else
-    const auto start = chrono::high_resolution_clock::now();
-    solver.solve(copy);
-    const double timeSec = chrono::duration<double>(chrono::high_resolution_clock::now() - start).count();
+        const auto start = chrono::high_resolution_clock::now();
+        solver.solve(copy);
+        const double timeSec = chrono::duration<double>(chrono::high_resolution_clock::now() - start).count();
 #endif
-    const int correct = CorrectnessChecker::check(copy) ? 1 : 0;
-
-    return {boardId, difficulty, "OpenMP", threads, timeSec, correct};
+        const int correct = CorrectnessChecker::check(copy) ? 1 : 0;
+        results.push_back({boardId, difficulty, "OpenMP", threads, rep, timeSec, correct});
+    }
+    return results;
 }
 
 void BenchmarkRunner::writeCsv(const vector<BenchmarkResult> &results, const string &outputPath) {
     ofstream file(outputPath);
-    file << "Board_ID,Difficulty,Algorithm,Threads,Time_s,Correct\n";
+    file << "Board_ID,Difficulty,Algorithm,Threads,Rep,Time_s,Correct\n";
     file << fixed << setprecision(6);
 
     for (const auto &r: results) {
@@ -125,6 +138,7 @@ void BenchmarkRunner::writeCsv(const vector<BenchmarkResult> &results, const str
                 << r.difficulty << ","
                 << r.algorithm << ","
                 << r.threads << ","
+                << r.rep << ","
                 << r.timeSec << ","
                 << r.correct << "\n";
     }

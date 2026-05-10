@@ -13,6 +13,7 @@ struct BenchmarkResult {
     string difficulty;
     string algorithm;
     int threads;
+    int rep;
     double timeSec;
     int correct;
 };
@@ -22,11 +23,11 @@ public:
     static void run(const string &outputDir, int puzzleCount = 20);
 
 private:
-    static BenchmarkResult benchmarkSerial(const Board &board, const string &boardId,
-                                           const string &difficulty);
+    static vector<BenchmarkResult> benchmarkSerial(const Board &board, const string &boardId,
+                                                   const string &difficulty);
 
-    static BenchmarkResult benchmarkOpenMP(const Board &board, const string &boardId,
-                                           const string &difficulty, int threads);
+    static vector<BenchmarkResult> benchmarkOpenMP(const Board &board, const string &boardId,
+                                                   const string &difficulty, int threads);
 
     static void writeCsv(const vector<BenchmarkResult> &results, const string &outputPath);
 };

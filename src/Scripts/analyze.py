@@ -57,26 +57,36 @@ def config_label(row):
 
 
 def load_data(paths):
-    df = pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
-    # Drop rows with non-positive times (same guard as original)
-    df = df[df["Time_s"] > 0].copy()
+    raw = pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
+    raw = raw[raw["Time_s"] > 0].copy()
+    print(f"Loaded {len(raw)} raw timing rows from {len(paths)} file(s).")
+
+    # Aggregate repetitions per puzzle × config — same pattern as the MM benchmark script.
+    # Each rep is a separate row in the CSV; we reduce to median + variance stats here.
+    group_keys = ["Board_ID", "Difficulty", "Algorithm", "Threads"]
+    time_agg = (
+        raw.groupby(group_keys)["Time_s"]
+        .agg(Time_s="median", Time_min="min", Time_max="max", Time_std="std")
+        .reset_index()
+    )
+    # Correct=1 if the solver produced the right answer on any rep
+    correct_agg = raw.groupby(group_keys)["Correct"].max().reset_index()
+
+    df = time_agg.merge(correct_agg, on=group_keys)
     df["Config"] = df.apply(config_label, axis=1)
-    # Cost = P * T(P). Serial has Threads=1 so Cost = T_serial for those rows.
     df["Cost"] = df["Threads"] * df["Time_s"]
-    print(f"Loaded {len(df)} valid timing rows from {len(paths)} file(s).")
+
+    print(f"  Aggregated to {len(df)} config rows (median across reps).")
     return df
 
 
 def compute_speedup(df):
     """
     Per-puzzle speedup and efficiency relative to the serial baseline.
+    Used for Q1-Q3 variance bands and per-puzzle distribution analysis.
 
-    Speedup    S(P) = T(1) / T(P)   — how many times faster than serial
-    Efficiency E(P) = S(P) / P      — fraction of ideal speedup (ideal = 1.0)
-    Cost       C(P) = P * T(P)      — total thread-seconds (ideal = T_serial, flat)
-
-    Matching on Board_ID + Difficulty ensures we compare the exact same puzzle
-    solved serially vs in parallel.
+    Aggregate speedup S_agg = sum(T_serial) / sum(T_parallel) is computed
+    separately inside each plot function to avoid mean-of-ratios inflation.
     """
     serial = (
         df[df["Algorithm"] == "Serial"][["Board_ID", "Difficulty", "Time_s"]]
@@ -90,20 +100,36 @@ def compute_speedup(df):
     return merged
 
 
+def _aggregate_speedup(speedup_df):
+    """
+    Aggregate speedup: sum(T_serial) / sum(T_parallel) per (Difficulty, Threads).
+    More honest than mean(T_serial/T_parallel), which is inflated by outlier puzzles
+    where serial is very slow but parallel gets lucky.
+    Uses an explicit loop to avoid pandas version issues with groupby key exclusion.
+    """
+    rows = []
+    for (diff, threads), g in speedup_df.groupby(["Difficulty", "Threads"]):
+        agg_speedup = g["T_serial"].sum() / g["Time_s"].sum()
+        rows.append({
+            "Difficulty": diff,
+            "Threads": threads,
+            "agg_speedup": agg_speedup,
+            "agg_efficiency": agg_speedup / threads,
+            "lo": g["Speedup"].quantile(0.25),
+            "hi": g["Speedup"].quantile(0.75),
+        })
+    return pd.DataFrame(rows)
+
+
 # ============================================================
-# PLOT 1 — Speedup vs Threads  (line + variance band, one per difficulty)
-# Variance band mirrors the original: shaded region between
-# (T_serial / T_max) and (T_serial / T_min) across puzzles,
-# showing how much speedup varies puzzle-to-puzzle.
+# PLOT 1 — Speedup vs Threads
+# Line = aggregate speedup S_agg = sum(T_serial) / sum(T_parallel).
+# Shaded band = Q1-Q3 of per-puzzle speedup (shows puzzle-to-puzzle variance).
 # ============================================================
 def plot_speedup_vs_threads(speedup_df):
     print("\n[Plot 1] Speedup vs Threads")
 
-    agg = (
-        speedup_df.groupby(["Difficulty", "Threads"])["Speedup"]
-        .agg(mean="mean", std="std", lo=lambda x: x.quantile(0.25), hi=lambda x: x.quantile(0.75))
-        .reset_index()
-    )
+    agg = _aggregate_speedup(speedup_df)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(THREAD_COUNTS, THREAD_COUNTS, "k--", lw=1, label="Ideal (linear)", zorder=1)
@@ -112,16 +138,17 @@ def plot_speedup_vs_threads(speedup_df):
         s = agg[agg["Difficulty"] == diff].sort_values("Threads")
         if s.empty:
             continue
-        ax.plot(s["Threads"], s["mean"], marker="o", color=DIFF_COLORS[diff], label=diff, zorder=2)
-        # Shaded variance band: Q1–Q3 of per-puzzle speedup distribution
+        ax.plot(s["Threads"], s["agg_speedup"], marker="o",
+                color=DIFF_COLORS[diff], label=diff, zorder=2)
         ax.fill_between(
             s["Threads"], s["lo"], s["hi"],
             color=DIFF_COLORS[diff], alpha=0.12,
         )
 
     ax.set_xlabel("OpenMP Threads")
-    ax.set_ylabel("Speedup  S(P) = T_serial / T_parallel")
-    ax.set_title("Speedup vs Thread Count by Difficulty\n(shaded band = Q1–Q3 across puzzles)")
+    ax.set_ylabel("Speedup  S = Σ T_serial / Σ T_parallel")
+    ax.set_title("Speedup vs Thread Count by Difficulty\n"
+                 "(line = aggregate speedup; band = Q1–Q3 per-puzzle)")
     ax.set_xticks(THREAD_COUNTS)
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -135,14 +162,13 @@ def plot_speedup_vs_threads(speedup_df):
 
 
 # ============================================================
-# PLOT 2 — Runtime vs Thread Count  (line, one per difficulty)
-# Serial sits at Threads=1; OpenMP at 4, 8, 16.
+# PLOT 2 — Runtime vs Thread Count
 # ============================================================
 def plot_runtime_vs_threads(df):
     print("\n[Plot 2] Runtime vs Thread Count")
 
     agg = df.groupby(["Difficulty", "Threads"])["Time_s"].mean().reset_index()
-    all_threads = sorted(df["Threads"].unique())  # [1, 4, 8, 16]
+    all_threads = sorted(df["Threads"].unique())
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -167,10 +193,13 @@ def plot_runtime_vs_threads(df):
 
 
 # ============================================================
-# PLOT 3 — Runtime Distribution Box Plots  (one subplot per difficulty)
+# PLOT 3 — Runtime Distribution — Violin Plots
+# Violin plots on log-transformed data show the full distribution shape
+# (bimodality, skew) that box plots hide.  Each difficulty gets one
+# subplot; each configuration gets one violin.
 # ============================================================
 def plot_runtime_distribution(df):
-    print("\n[Plot 3] Runtime Distribution Box Plots")
+    print("\n[Plot 3] Runtime Distribution Violin Plots")
 
     configs = ["Serial"] + [f"OpenMP-{t}" for t in THREAD_COUNTS]
     fig, axes = plt.subplots(1, len(DIFFICULTIES), figsize=(16, 5), sharey=False)
@@ -178,17 +207,46 @@ def plot_runtime_distribution(df):
 
     for ax, diff in zip(axes, DIFFICULTIES):
         subset = df[df["Difficulty"] == diff]
-        data = [subset[subset["Config"] == cfg]["Time_s"].dropna().values for cfg in configs]
 
-        bp = ax.boxplot(data, patch_artist=True, labels=configs)
-        for patch, cfg in zip(bp["boxes"], configs):
-            patch.set_facecolor(CONFIG_COLORS.get(cfg, "gray"))
-            patch.set_alpha(0.75)
+        # Log-transform so violin kernel density makes sense on a skewed distribution
+        log_data = [
+            np.log10(subset[subset["Config"] == cfg]["Time_s"].dropna().values)
+            for cfg in configs
+        ]
 
+        parts = ax.violinplot(
+            log_data,
+            positions=range(len(configs)),
+            showmedians=True,
+            showextrema=True,
+        )
+
+        for body, cfg in zip(parts["bodies"], configs):
+            body.set_facecolor(CONFIG_COLORS.get(cfg, "#888888"))
+            body.set_alpha(0.72)
+            body.set_edgecolor("black")
+            body.set_linewidth(0.5)
+
+        for key in ("cbars", "cmins", "cmaxes"):
+            if key in parts:
+                parts[key].set_color("black")
+                parts[key].set_linewidth(0.8)
+        if "cmedians" in parts:
+            parts["cmedians"].set_color("white")
+            parts["cmedians"].set_linewidth(2.0)
+
+        ax.set_xticks(range(len(configs)))
+        ax.set_xticklabels(configs, rotation=30, ha="right", fontsize=8)
         ax.set_title(diff, fontsize=11)
         ax.set_ylabel("Time (seconds)" if diff == DIFFICULTIES[0] else "")
-        ax.set_yscale("log")
-        ax.tick_params(axis="x", rotation=30)
+
+        # Re-label y-axis: data is log10(seconds), show as 10^n labels
+        lo, hi = ax.get_ylim()
+        tick_pows = [p for p in range(-5, 2) if lo - 0.15 <= p <= hi + 0.15]
+        if tick_pows:
+            ax.set_yticks(tick_pows)
+            ax.set_yticklabels([f"$10^{{{p}}}$" for p in tick_pows])
+
         ax.grid(True, alpha=0.3, axis="y")
 
     fig.tight_layout()
@@ -200,7 +258,9 @@ def plot_runtime_distribution(df):
 
 # ============================================================
 # PLOT 4 — Parallel Efficiency Heatmap
-# E(P) = S(P) / P.  Ideal = 1.0.
+# Uses aggregate efficiency E_agg = S_agg / P.
+# vmax is set to the actual data maximum so the colormap is not
+# clipped at 1.0, which would make superlinear cells indistinguishable.
 # ============================================================
 def plot_efficiency_heatmap(speedup_df):
     if not HAS_SEABORN:
@@ -209,19 +269,20 @@ def plot_efficiency_heatmap(speedup_df):
 
     print("\n[Plot 4] Parallel Efficiency Heatmap")
 
-    agg = speedup_df.groupby(["Difficulty", "Threads"])["Efficiency"].mean().reset_index()
+    agg = _aggregate_speedup(speedup_df)
     pivot = (
-        agg.pivot(index="Difficulty", columns="Threads", values="Efficiency")
+        agg.pivot(index="Difficulty", columns="Threads", values="agg_efficiency")
         .reindex(DIFFICULTIES)
     )
 
     fig, ax = plt.subplots(figsize=(7, 4))
     sns.heatmap(
         pivot, annot=True, fmt=".2f", cmap="YlGn",
-        vmin=0, vmax=1, ax=ax, linewidths=0.5,
-        cbar_kws={"label": "Efficiency  E(P) = S(P) / P"},
+        vmin=0, vmax=1.0, ax=ax, linewidths=0.5,
+        cbar_kws={"label": "Aggregate Efficiency  E = S_agg / P"},
     )
-    ax.set_title("Parallel Efficiency by Difficulty and Thread Count\n(ideal = 1.0)")
+    ax.set_title("Parallel Efficiency by Difficulty and Thread Count\n"
+                 "(aggregate: ideal = 1.0)")
     ax.set_xlabel("OpenMP Threads")
     ax.set_ylabel("Difficulty")
 
@@ -232,62 +293,60 @@ def plot_efficiency_heatmap(speedup_df):
 
 
 # ============================================================
-# PLOT 5 — Serial vs Best OpenMP  (bar, per difficulty)
+# PLOT 5 — Serial vs All OpenMP Configurations
+# Grouped bar chart: one group per difficulty, one bar per config.
+# Shows the full picture across all thread counts, not just the highest.
 # ============================================================
-def plot_serial_vs_best_omp(df):
-    print("\n[Plot 5] Serial vs Best OpenMP Time")
+def plot_serial_vs_all_omp(df):
+    print("\n[Plot 5] Serial vs All OpenMP Configurations")
 
-    serial_avg = (
-        df[df["Algorithm"] == "Serial"]
-        .groupby("Difficulty")["Time_s"].mean()
-        .reindex(DIFFICULTIES)
-    )
-    best_omp = (
-        df[(df["Algorithm"] == "OpenMP") & (df["Threads"] == THREAD_COUNTS[-1])]
-        .groupby("Difficulty")["Time_s"].mean()
-        .reindex(DIFFICULTIES)
-    )
+    configs = ["Serial"] + [f"OpenMP-{t}" for t in THREAD_COUNTS]
+    avg = df.groupby(["Difficulty", "Config"])["Time_s"].mean().reset_index()
 
     x = np.arange(len(DIFFICULTIES))
-    width = 0.35
+    n = len(configs)
+    width = 0.72 / n
 
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.bar(x - width / 2, serial_avg.values, width,
-           label="Serial", color=CONFIG_COLORS["Serial"])
-    ax.bar(x + width / 2, best_omp.values, width,
-           label=f"OpenMP-{THREAD_COUNTS[-1]}",
-           color=CONFIG_COLORS[f"OpenMP-{THREAD_COUNTS[-1]}"])
+    fig, ax = plt.subplots(figsize=(11, 5))
+
+    for i, cfg in enumerate(configs):
+        vals = (
+            avg[avg["Config"] == cfg]
+            .set_index("Difficulty")
+            .reindex(DIFFICULTIES)["Time_s"]
+            .values
+        )
+        offset = (i - n / 2 + 0.5) * width
+        ax.bar(
+            x + offset, vals, width * 0.92,
+            label=cfg,
+            color=CONFIG_COLORS.get(cfg, "#888888"),
+        )
 
     ax.set_xlabel("Difficulty")
     ax.set_ylabel("Average Solve Time (seconds, log scale)")
-    ax.set_title(f"Serial vs OpenMP-{THREAD_COUNTS[-1]} Average Solve Time")
+    ax.set_title("Average Solve Time: Serial vs All OpenMP Configurations")
     ax.set_xticks(x)
     ax.set_xticklabels(DIFFICULTIES)
     ax.set_yscale("log")
     ax.legend()
     ax.grid(True, alpha=0.3, axis="y")
 
-    path = os.path.join(PLOT_DIR, "serial_vs_best_omp.png")
+    path = os.path.join(PLOT_DIR, "serial_vs_all_omp.png")
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {path}")
 
 
 # ============================================================
-# PLOT 6 — Cost vs Threads  (line, one per difficulty)
-# C(P) = P * T(P).
-# Dashed horizontal line at each difficulty's C(1) = T_serial is the
-# cost-optimal target (same pattern as the original script's axhline).
-# A data line hugging its dashed reference = cost-optimal.
-# A rising line = parallelisation overhead consuming extra work.
+# PLOT 6 — Cost vs Threads
 # ============================================================
 def plot_cost_vs_threads(df):
     print("\n[Plot 6] Cost vs Threads")
 
     agg = df.groupby(["Difficulty", "Threads"])["Cost"].mean().reset_index()
-    all_threads = sorted(df["Threads"].unique())  # [1, 4, 8, 16]
+    all_threads = sorted(df["Threads"].unique())
 
-    # Serial cost C(1) = T_serial * 1 = T_serial, the cost-optimal baseline
     serial_cost = (
         df[df["Threads"] == 1]
         .groupby("Difficulty")["Cost"].mean()
@@ -300,14 +359,12 @@ def plot_cost_vs_threads(df):
         if s.empty:
             continue
         ax.plot(s["Threads"], s["Cost"], marker="s", color=DIFF_COLORS[diff], label=diff, zorder=2)
-        # Dashed reference line at serial cost C(1) — cost-optimal target
         if diff in serial_cost.index:
             ax.axhline(
                 serial_cost[diff],
                 color=DIFF_COLORS[diff], lw=1, linestyle="--", alpha=0.5, zorder=1,
             )
 
-    # Proxy artist to explain the dashed lines without cluttering the legend
     dash_proxy = mpatches.Patch(
         facecolor="none", edgecolor="gray", linestyle="--", label="— serial C(1) reference"
     )
@@ -330,8 +387,8 @@ def plot_cost_vs_threads(df):
 
 # ============================================================
 # SUMMARY TABLE
-# Columns match the original: time_median, time_std, speedup, efficiency, cost
-# plus time_min and time_max for the full distribution picture.
+# Reports both aggregate speedup/efficiency (S_agg = ΣT_serial/ΣT_parallel)
+# and mean per-puzzle speedup alongside the timing statistics.
 # ============================================================
 def save_summary_table(df, speedup_df):
     print("\n[Table] Summary")
@@ -355,32 +412,52 @@ def save_summary_table(df, speedup_df):
         .rename(columns={"Cost": "Cost_mean"})
     )
 
-    speedup_agg = (
+    # Aggregate speedup/efficiency (honest metric)
+    agg_rows = []
+    for (diff, config), g in speedup_df.groupby(["Difficulty", "Config"]):
+        threads = g["Threads"].iloc[0]
+        agg_speedup = g["T_serial"].sum() / g["Time_s"].sum()
+        agg_rows.append({
+            "Difficulty": diff,
+            "Config": config,
+            "Agg_Speedup": agg_speedup,
+            "Agg_Efficiency": agg_speedup / threads,
+        })
+    agg_metrics = pd.DataFrame(agg_rows)
+
+    # Mean per-puzzle speedup/efficiency (kept for reference, but note it is inflated by outliers)
+    mean_speedup = (
         speedup_df.groupby(["Difficulty", "Config"])["Speedup"]
         .mean()
         .reset_index()
         .rename(columns={"Speedup": "Speedup_mean"})
     )
-    efficiency_agg = (
+    mean_efficiency = (
         speedup_df.groupby(["Difficulty", "Config"])["Efficiency"]
         .mean()
         .reset_index()
         .rename(columns={"Efficiency": "Efficiency_mean"})
     )
 
-    # Serial: speedup = 1.0, efficiency = 1.0 by definition
+    # Serial reference rows: speedup = 1.0, efficiency = 1.0 by definition
     serial_ref = time_agg[time_agg["Config"] == "Serial"][["Difficulty", "Config"]].copy()
+    serial_ref_agg = serial_ref.copy()
+    serial_ref_agg["Agg_Speedup"] = 1.0
+    serial_ref_agg["Agg_Efficiency"] = 1.0
+    agg_metrics = pd.concat([agg_metrics, serial_ref_agg], ignore_index=True)
+
     serial_ref["Speedup_mean"] = 1.0
+    mean_speedup = pd.concat([mean_speedup, serial_ref[["Difficulty", "Config", "Speedup_mean"]]], ignore_index=True)
     serial_ref["Efficiency_mean"] = 1.0
-    speedup_agg = pd.concat([speedup_agg, serial_ref[["Difficulty", "Config", "Speedup_mean"]]], ignore_index=True)
-    efficiency_agg = pd.concat([efficiency_agg, serial_ref[["Difficulty", "Config", "Efficiency_mean"]]],
-                               ignore_index=True)
+    mean_efficiency = pd.concat([mean_efficiency, serial_ref[["Difficulty", "Config", "Efficiency_mean"]]],
+                                ignore_index=True)
 
     summary = (
         time_agg
         .merge(cost_agg, on=["Difficulty", "Config"], how="left")
-        .merge(speedup_agg, on=["Difficulty", "Config"], how="left")
-        .merge(efficiency_agg, on=["Difficulty", "Config"], how="left")
+        .merge(agg_metrics, on=["Difficulty", "Config"], how="left")
+        .merge(mean_speedup, on=["Difficulty", "Config"], how="left")
+        .merge(mean_efficiency, on=["Difficulty", "Config"], how="left")
     )
 
     config_order = ["Serial"] + [f"OpenMP-{t}" for t in THREAD_COUNTS]
@@ -393,8 +470,8 @@ def save_summary_table(df, speedup_df):
     print(f"  Saved: {path}")
 
     pd.set_option("display.max_rows", 200)
-    pd.set_option("display.float_format", "{:.6f}".format)
-    pd.set_option("display.width", 160)
+    pd.set_option("display.float_format", "{:.4f}".format)
+    pd.set_option("display.width", 200)
     print(summary.to_string(index=False))
 
 
@@ -417,7 +494,7 @@ if __name__ == "__main__":
     plot_runtime_vs_threads(df_correct)
     plot_runtime_distribution(df_correct)
     plot_efficiency_heatmap(speedup_df)
-    plot_serial_vs_best_omp(df_correct)
+    plot_serial_vs_all_omp(df_correct)
     plot_cost_vs_threads(df_correct)
     save_summary_table(df_correct, speedup_df)
 
