@@ -49,6 +49,10 @@ bool OpenMPSolver::solveGridParallel(Board &board, std::atomic<bool> &solved, co
         return true;
     }
 
+    // Snapshot board before spawning any tasks — tasks get a firstprivate copy of this snapshot,
+    // so `board` is never read concurrently while another task writes it in the critical section
+    const Board snapshot = board;
+
     bool solvedHere = false;
     // Create a synchronization region for tasks created in this loop
 #pragma omp taskgroup
@@ -59,15 +63,13 @@ bool OpenMPSolver::solveGridParallel(Board &board, std::atomic<bool> &solved, co
                 continue;
             }
 
-            if (!isValid(row, col, value, board)) {
+            if (!isValid(row, col, value, snapshot)) {
                 continue;
             }
-            // Create new tasks for each valid value
-            // Each task get a copy of the current board state and tries to solve it recursively
-#pragma omp task firstprivate(row, col, value, depth) shared(board, solved, solvedHere)
+            // Each task gets its own private copy of snapshot to explore independently
+#pragma omp task firstprivate(row, col, value, depth, snapshot) shared(board, solved, solvedHere)
             {
-                // Create a local copy of the board for this task to explore
-                Board candidate = board;
+                Board candidate = snapshot;
                 candidate.setBoardValue(row, col, value);
 
                 bool branchSolved;
