@@ -38,7 +38,7 @@ void OpenMPSolver::solve(Board &board) {
 #endif
 }
 
-static constexpr int TASK_DEPTH_CUTOFF = 4;
+static constexpr int TASK_DEPTH_CUTOFF = 3;
 
 bool OpenMPSolver::solveGridParallel(Board &board, std::atomic<bool> &solved, const int depth) {
     int row = -1;
