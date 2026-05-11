@@ -35,15 +35,15 @@ static constexpr DifficultyConfig DIFFICULTIES[] = {
     {3, "Extreme", "extreme"},
 };
 
-static string makeOutputPath(const string &outputDir) {
+string BenchmarkRunner::makeOutputPath(const string &outputDir, const string &prefix) {
     mkdir(outputDir.c_str(), 0755);
     const time_t now = time(nullptr);
     char buf[20];
     strftime(buf, sizeof(buf), "%Y%m%d_%H%M%S", localtime(&now));
-    return outputDir + "/results_" + buf + ".csv";
+    return outputDir + "/" + prefix + "_" + buf + ".csv";
 }
 
-static void printRow(const BenchmarkResult &r) {
+void BenchmarkRunner::printRow(const BenchmarkResult &r) {
     cout << fixed << setprecision(6)
             << r.boardId << ","
             << r.difficulty << ","
@@ -55,8 +55,11 @@ static void printRow(const BenchmarkResult &r) {
 }
 
 void BenchmarkRunner::run(const string &outputDir, const int puzzleCount) {
-    const string outputPath = makeOutputPath(outputDir);
+    runBenchmarks(outputDir, puzzleCount);
+}
 
+void BenchmarkRunner::runBenchmarks(const string &outputDir, const int puzzleCount) {
+    const string outputPath = makeOutputPath(outputDir, "results");
     vector<BenchmarkResult> results;
 
     cout << "Board_ID,Difficulty,Algorithm,Threads,Rep,Time_s,Correct\n";
