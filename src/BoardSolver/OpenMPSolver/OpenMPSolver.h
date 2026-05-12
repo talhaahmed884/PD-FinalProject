@@ -12,7 +12,7 @@ public:
     void solve(Board &board) override;
 
 private:
-    static bool solveGridParallel(Board &board, std::atomic<bool> &solved);
+    static bool solveGridParallel(const Board &board, Board &solutionBoard, std::atomic<bool> &solved, int depth);
 
     static bool solveGridSerial(Board &board, std::atomic<bool> &solved);
 
@@ -24,6 +24,12 @@ private:
     static bool isValidInRow(int row, int value, const Board &board);
 
     static bool isValidInCol(int col, int value, const Board &board);
+
+    static int countCandidates(int row, int col, const Board &board);
+
+    // Returns false when no empty cell exists (board is solved).
+    // Exits early with the dead-end cell when a cell has 0 candidates (fail fast).
+    static bool findMRVCell(const Board &board, int &row, int &col);
 
     int maxThreads;
 };

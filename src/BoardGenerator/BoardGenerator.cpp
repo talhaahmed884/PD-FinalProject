@@ -1,5 +1,6 @@
 #include "BoardGenerator.h"
 #include "../SudokuBoard/CommonConstants.h"
+#include "PuzzleBank.h"
 
 #include <algorithm>
 #include <numeric>
@@ -137,4 +138,39 @@ bool BoardGenerator::isValidInCol(const int col, const int clueValue, const Boar
 
 int BoardGenerator::getNoOfClues() {
     return static_cast<int>(CommonConstants::BoardClues);
+}
+
+vector<Board> BoardGenerator::loadProblems(const int count, const int difficultyLevel) {
+    constexpr int boardSize = static_cast<int>(CommonConstants::BoardSize);
+    vector<string> puzzleBank;
+
+    if (difficultyLevel == 0) {
+        puzzleBank = EASY_PUZZLE_BANK;
+    } else if (difficultyLevel == 1) {
+        puzzleBank = MEDIUM_PUZZLE_BANK;
+    } else if (difficultyLevel == 2) {
+        puzzleBank = HARD_PUZZLE_BANK;
+    } else {
+        puzzleBank = EXTREME_HARD_PUZZLE_BANK;
+    }
+
+    const int limit = min(count, static_cast<int>(puzzleBank.size()));
+
+    vector<Board> boards;
+    boards.reserve(limit);
+
+    for (int i = 0; i < limit; i++) {
+        Board board;
+        const string &puzzle = puzzleBank[i];
+
+        for (int pos = 0; pos < static_cast<int>(puzzle.size()); pos++) {
+            if (puzzle[pos] != '.') {
+                board.setBoardValue(pos / boardSize, pos % boardSize, puzzle[pos] - '0');
+            }
+        }
+
+        boards.push_back(board);
+    }
+
+    return boards;
 }

@@ -15,80 +15,73 @@ OpenMPSolver::OpenMPSolver(int maxThreads) : maxThreads(maxThreads) {
 }
 
 void OpenMPSolver::solve(Board &board) {
-    // flag to indicate if the solution has been found, a shared atomic variable to flag
     std::atomic<bool> solved(false);
+    Board solutionBoard;
 
 #ifdef _OPENMP
-    // Parallelize the solving process using OpenMP tasks.
-    // Create threads to explore
 #pragma omp parallel
     {
-#pragma omp single nowait //Without single, all threads would start solving the grid independently resulting in wrong result
-
-
-
+#pragma omp single nowait
         {
-            // Only ONE thread starts recursively solving the grid.
-            // Other threads are immediately available for parallel tasks created by the first thread
-            solveGridParallel(board, solved);
+            solveGridParallel(board, solutionBoard, solved, 0);
         }
+    }
+    if (solved.load()) {
+        board = solutionBoard;
     }
 #else
     solveGridSerial(board, solved);
 #endif
 }
 
-bool OpenMPSolver::solveGridParallel(Board &board, std::atomic<bool> &solved) {
+static constexpr int TASK_DEPTH_CUTOFF = 3;
+
+bool OpenMPSolver::solveGridParallel(const Board &board, Board &solutionBoard,
+                                     std::atomic<bool> &solved, const int depth) {
+    if (solved.load()) return false;
+
     int row = -1;
     int col = -1;
 
-    for (int r = 0; r < static_cast<int>(CommonConstants::BoardSize); r++) {
-        for (int c = 0; c < static_cast<int>(CommonConstants::BoardSize); c++) {
-            if (!board.getBoardBlock(r, c).getIsFilled()) {
-                row = r;
-                col = c;
-                break;
+    if (!findMRVCell(board, row, col)) {
+        // No empty cells — board is fully solved; claim the solution slot
+#pragma omp critical
+        {
+            if (!solved.exchange(true)) {
+                solutionBoard = board;
             }
         }
-        if (row != -1) {
-            break;
-        }
-    }
-
-    if (row == -1) {
-        solved = true;
         return true;
     }
 
-    bool solvedHere = false;
-    // Create a synchronization region for tasks created in this loop
+    // `board` is const from here on — tasks never write to it.
+    // Each task gets a firstprivate copy of this snapshot to explore independently.
+    const Board snapshot = board;
+
 #pragma omp taskgroup
     {
-        // try all possible values for the current empty cell
         for (int value = 1; value <= static_cast<int>(CommonConstants::BoardSize); value++) {
-            if (solved.load()) {
-                continue;
-            }
+            if (solved.load()) break;
+            if (!isValid(row, col, value, snapshot)) continue;
 
-            if (!isValid(row, col, value, board)) {
-                continue;
-            }
-            // Create new tasks for each valid value
-            // Each task get a copy of the current board state and tries to solve it recursively
-#pragma omp task firstprivate(row, col, value) shared(board, solved, solvedHere)
+#pragma omp task firstprivate(row, col, value, depth, snapshot) shared(solutionBoard, solved)
             {
-                // Create a local copy of the board for this task to explore
-                Board candidate = board;
-                candidate.setBoardValue(row, col, value);
+                if (!solved.load()) {
+                    Board candidate = snapshot;
+                    candidate.setBoardValue(row, col, value);
 
-                if (solveGridSerial(candidate, solved)) {
-                    if (!solved.exchange(true)) {
-                        // Protects shared board update
-                        // Without this critical section, multiple threads could update the board simultaneously
+                    if (depth + 1 < TASK_DEPTH_CUTOFF) {
+                        // Recurse: inner call writes directly to solutionBoard when it finds a solution
+                        solveGridParallel(candidate, solutionBoard, solved, depth + 1);
+                    } else {
+                        // Serial fallback: candidate is task-private, no sharing
+                        if (solveGridSerial(candidate, solved)) {
 #pragma omp critical
-                        {
-                            board = candidate;
-                            solvedHere = true;
+                            {
+                                if (!solved.exchange(true)) {
+                                    solutionBoard = candidate;
+                                }
+                            }
                         }
                     }
                 }
@@ -96,7 +89,7 @@ bool OpenMPSolver::solveGridParallel(Board &board, std::atomic<bool> &solved) {
         }
     }
 
-    return solvedHere;
+    return solved.load();
 }
 
 bool OpenMPSolver::solveGridSerial(Board &board, std::atomic<bool> &solved) {
@@ -107,20 +100,7 @@ bool OpenMPSolver::solveGridSerial(Board &board, std::atomic<bool> &solved) {
     int row = -1;
     int col = -1;
 
-    for (int r = 0; r < static_cast<int>(CommonConstants::BoardSize); r++) {
-        for (int c = 0; c < static_cast<int>(CommonConstants::BoardSize); c++) {
-            if (!board.getBoardBlock(r, c).getIsFilled()) {
-                row = r;
-                col = c;
-                break;
-            }
-        }
-        if (row != -1) {
-            break;
-        }
-    }
-
-    if (row == -1) {
+    if (!findMRVCell(board, row, col)) {
         return true;
     }
 
@@ -143,6 +123,37 @@ bool OpenMPSolver::solveGridSerial(Board &board, std::atomic<bool> &solved) {
     }
 
     return false;
+}
+
+int OpenMPSolver::countCandidates(const int row, const int col, const Board &board) {
+    int count = 0;
+    for (int val = 1; val <= static_cast<int>(CommonConstants::BoardSize); val++) {
+        if (isValid(row, col, val, board)) count++;
+    }
+    return count;
+}
+
+bool OpenMPSolver::findMRVCell(const Board &board, int &row, int &col) {
+    constexpr int boardSize = static_cast<int>(CommonConstants::BoardSize);
+    int minCandidates = boardSize + 1;
+    row = -1;
+    col = -1;
+
+    for (int r = 0; r < boardSize; r++) {
+        for (int c = 0; c < boardSize; c++) {
+            if (board.getBoardBlock(r, c).getIsFilled()) continue;
+
+            const int candidates = countCandidates(r, c, board);
+            if (candidates < minCandidates) {
+                minCandidates = candidates;
+                row = r;
+                col = c;
+                if (minCandidates == 0) return true; // Dead end — fail fast, no point scanning further
+            }
+        }
+    }
+
+    return row != -1; // false = no empty cells = board is solved
 }
 
 bool OpenMPSolver::isValid(const int row, const int column, const int value, const Board &board) {
