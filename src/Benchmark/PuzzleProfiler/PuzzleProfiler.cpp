@@ -7,7 +7,7 @@ using namespace std;
 long long PuzzleProfiler::countNodes(const Board &board) {
     Board copy = board;
     long long nodes = 0;
-    solveAndCount(copy, nodes);
+    solveAndCountMRV(copy, nodes);
     return nodes;
 }
 
@@ -150,7 +150,7 @@ bool PuzzleProfiler::solveAndCountMRV(Board &board, long long &nodes) {
         ++nodes;
         board.setBoardValue(row, col, value);
 
-        if (solveAndCount(board, nodes)) {
+        if (solveAndCountMRV(board, nodes)) {
             return true;
         }
 
