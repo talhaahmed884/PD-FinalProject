@@ -23,7 +23,7 @@ void PuzzleProfiler::profileFromFile(const string &filePath, const long long min
     string line;
     int index = 0;
     while (getline(file, line)) {
-        if (index > 38) {
+        if (index >= 100) {
             break;
         }
 
@@ -36,7 +36,6 @@ void PuzzleProfiler::profileFromFile(const string &filePath, const long long min
 
         if (nodes >= minNodes && nodes <= maxNodes) {
             cout << index << "," << nodes << "," << line << "\n";
-
             index++;
         }
     }
@@ -135,7 +134,7 @@ bool PuzzleProfiler::findMRVCell(const Board &board, int &row, int &col) {
     return row != -1; // false = no empty cells = board is solved
 }
 
-bool PuzzleProfiler::solveAndCount(Board &board, long long &nodes) {
+bool PuzzleProfiler::solveAndCountMRV(Board &board, long long &nodes) {
     int row = -1;
     int col = -1;
 
@@ -159,4 +158,34 @@ bool PuzzleProfiler::solveAndCount(Board &board, long long &nodes) {
     }
 
     return false;
+}
+
+bool PuzzleProfiler::solveAndCount(Board &board, long long &nodes) {
+    for (int row = 0; row < static_cast<int>(CommonConstants::BoardSize); row++) {
+        for (int col = 0; col < static_cast<int>(CommonConstants::BoardSize); col++) {
+            if (board.getBoardBlock(row, col).getIsFilled()) {
+                continue;
+            }
+
+            for (int val = 1; val <= static_cast<int>(CommonConstants::BoardSize); val++) {
+                if (!isValid(row, col, val, board)) {
+                    continue;
+                }
+
+                board.setBoardValue(row, col, val);
+
+                ++nodes;
+
+                if (solveAndCount(board, nodes)) {
+                    return true;
+                }
+
+                board.resetBoardBlock(row, col);
+            }
+
+            return false;
+        }
+    }
+
+    return true;
 }

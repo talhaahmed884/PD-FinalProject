@@ -32,6 +32,8 @@ private:
 
     static bool solveAndCount(Board &board, long long &nodes);
 
+    static bool solveAndCountMRV(Board &board, long long &nodes);
+
     static Board parseFromLine(string &line);
 };
 
