@@ -31,6 +31,12 @@ private:
     static vector<BenchmarkResult> benchmarkOpenMP(const Board &board, const string &boardId,
                                                    const string &difficulty, int threads);
 
+    static vector<BenchmarkResult> benchmarkDLX(const Board &board, const string &boardId,
+                                                const string &difficulty);
+
+    static vector<BenchmarkResult> benchmarkDLXParallel(const Board &board, const string &boardId,
+                                                        const string &difficulty, int threads);
+
     static void writeCsv(const vector<BenchmarkResult> &results, const string &outputPath);
 
     static string makeOutputPath(const string &outputDir, const string &prefix);

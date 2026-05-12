@@ -1,4 +1,14 @@
 #include "DLXSolver.h"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
+DLXSolver::DLXSolver(int maxThreads) : maxThreads(maxThreads) {
+#ifdef _OPENMP
+    if (maxThreads > 0)
+        omp_set_num_threads(maxThreads);
+#endif
+}
 
 // ─────────────────────────────────────────────
 // Step 1: init()   — build the empty header ring
@@ -228,6 +238,52 @@ void DLXSolver::fillBoard(Board &board)
 void DLXSolver::solve(Board &board)
 {
     buildMatrix(board);
+
+#ifdef _OPENMP
+    if (maxThreads != 1) {
+        // Collect all candidates from the first chosen column
+        Node *col = chooseColumn();
+        std::vector<int> candidates;
+        for (Node *row = col->down; row != col; row = row->down)
+            candidates.push_back(row->rowId);
+
+        std::atomic<bool> found(false);
+        Board result;
+
+        #pragma omp parallel
+        #pragma omp single nowait
+        {
+            for (int rowId : candidates) {
+                #pragma omp task firstprivate(rowId) shared(found, result, board)
+                {
+                    if (!found) {
+                        // Pre-place this candidate on a board copy
+                        int r     = rowId / 81;
+                        int c     = (rowId % 81) / 9;
+                        int digit = rowId % 9 + 1;
+                        Board copy = board;
+                        copy.setBoardValue(r, c, digit);
+
+                        // Each task gets its own independent DLX instance
+                        DLXSolver local(1);
+                        local.buildMatrix(copy);
+                        local.search(0);
+
+                        if (local.foundSolution && !found.exchange(true)) {
+                            local.fillBoard(copy);
+                            result = copy;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (found) board = result;
+        return;
+    }
+#endif
+
+    // Serial path
     search(0);
     if (foundSolution)
         fillBoard(board);

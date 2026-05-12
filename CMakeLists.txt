@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.31.2)
+cmake_minimum_required(VERSION 3.15)
 project(PDC_FinalProject)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -17,6 +17,8 @@ add_executable(PDC_FinalProject src/main.cpp
         src/BoardSolver/SerialSolver/SerialSolver.h
         src/BoardSolver/OpenMPSolver/OpenMPSolver.cpp
         src/BoardSolver/OpenMPSolver/OpenMPSolver.h
+        src/BoardSolver/DLXSolver/DLXSolver.cpp
+        src/BoardSolver/DLXSolver/DLXSolver.h
         src/CorrectnessChecker/CorrectnessChecker.cpp
         src/CorrectnessChecker/CorrectnessChecker.h
         src/Benchmark/BenchmarkRunner.cpp
@@ -35,14 +37,14 @@ if (HPC)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fopenmp")
 elseif (APPLE)
     set(CMAKE_PREFIX_PATH "/opt/homebrew/opt/libomp;/usr/local/opt/libomp" ${CMAKE_PREFIX_PATH})
-    find_package(OpenMP REQUIRED)
+    find_package(OpenMP)
     if (OpenMP_CXX_FOUND)
         target_link_libraries(PDC_FinalProject PRIVATE OpenMP::OpenMP_CXX)
     else ()
         message(WARNING "OpenMP not found; the solver will build but run serially.")
     endif ()
 else ()
-    find_package(OpenMP REQUIRED)
+    find_package(OpenMP)
     if (OpenMP_CXX_FOUND)
         target_link_libraries(PDC_FinalProject PRIVATE OpenMP::OpenMP_CXX)
     else ()
