@@ -21,6 +21,8 @@ add_executable(PDC_FinalProject src/main.cpp
         src/CorrectnessChecker/CorrectnessChecker.h
         src/Benchmark/BenchmarkRunner.cpp
         src/Benchmark/BenchmarkRunner.h
+        src/Benchmark/PuzzleProfiler/PuzzleProfiler.h
+        src/Benchmark/PuzzleProfiler/PuzzleProfiler.cpp
 )
 
 target_compile_definitions(PDC_FinalProject PRIVATE "PROJECT_ROOT=\"${CMAKE_SOURCE_DIR}\"")
