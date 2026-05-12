@@ -28,6 +28,9 @@ private:
     static vector<BenchmarkResult> benchmarkSerial(const Board &board, const string &boardId,
                                                    const string &difficulty);
 
+    static vector<BenchmarkResult> benchmarkSerialMRV(const Board &board, const string &boardId,
+                                                      const string &difficulty);
+
     static vector<BenchmarkResult> benchmarkOpenMP(const Board &board, const string &boardId,
                                                    const string &difficulty, int threads);
 

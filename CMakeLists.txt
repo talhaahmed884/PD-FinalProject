@@ -15,6 +15,8 @@ add_executable(PDC_FinalProject src/main.cpp
         src/BoardSolver/Solver.h
         src/BoardSolver/SerialSolver/SerialSolver.cpp
         src/BoardSolver/SerialSolver/SerialSolver.h
+        src/BoardSolver/SerialMRVSolver/SerialMRVSolver.cpp
+        src/BoardSolver/SerialMRVSolver/SerialMRVSolver.h
         src/BoardSolver/OpenMPSolver/OpenMPSolver.cpp
         src/BoardSolver/OpenMPSolver/OpenMPSolver.h
         src/BoardSolver/DLXSolver/DLXSolver.cpp
