@@ -45,6 +45,9 @@ CONFIG_COLORS = {
     "OpenMP-4": "#ff7f0e",
     "OpenMP-8": "#2ca02c",
     "OpenMP-16": "#1f77b4",
+    "OMP-Frontier-4": "#bcbd22",
+    "OMP-Frontier-8": "#f7b6d2",
+    "OMP-Frontier-16": "#aec7e8",
     "DLX": "#9467bd",
     "DLX-OMP-4": "#e377c2",
     "DLX-OMP-8": "#8c564b",
@@ -63,6 +66,8 @@ def config_label(row):
         return "Serial-MRV"
     elif alg == "OpenMP":
         return f"OpenMP-{int(row['Threads'])}"
+    elif alg == "OMP-Frontier":
+        return f"OMP-Frontier-{int(row['Threads'])}"
     elif alg == "DLX":
         return "DLX"
     else:  # DLX-OMP
@@ -74,6 +79,8 @@ def algorithm_family(alg):
         return "DLX"
     elif alg == "Serial-MRV":
         return "Backtracking-MRV"
+    elif alg == "OMP-Frontier":
+        return "Backtracking-Frontier"
     else:
         return "Backtracking"
 
@@ -149,6 +156,15 @@ def compute_speedup(df):
         merged["Family"] = "DLX"
         results.append(merged)
 
+    # Backtracking-Frontier family: OMP-Frontier vs Serial-MRV
+    omp_frontier = df[df["Algorithm"] == "OMP-Frontier"].copy()
+    if not omp_frontier.empty and not serial_mrv.empty:
+        merged = omp_frontier.merge(serial_mrv, on=["Board_ID", "Difficulty"])
+        merged["Speedup"] = merged["T_serial"] / merged["Time_s"]
+        merged["Efficiency"] = merged["Speedup"] / merged["Threads"]
+        merged["Family"] = "Backtracking-Frontier"
+        results.append(merged)
+
     return pd.concat(results, ignore_index=True) if results else pd.DataFrame()
 
 
@@ -182,7 +198,7 @@ def plot_speedup_vs_threads(speedup_df):
         print("  Skipped — no speedup data.")
         return
 
-    families = [f for f in ["Backtracking", "Backtracking-MRV", "DLX"]
+    families = [f for f in ["Backtracking", "Backtracking-MRV", "Backtracking-Frontier", "DLX"]
                 if f in speedup_df["Family"].values]
     fig, axes = plt.subplots(1, len(families), figsize=(7 * len(families), 5), sharey=False)
     if len(families) == 1:
@@ -191,6 +207,7 @@ def plot_speedup_vs_threads(speedup_df):
     subtitles = {
         "Backtracking": "Algorithm A — Backtracking (OpenMP vs Serial)",
         "Backtracking-MRV": "Algorithm A — Backtracking (OpenMP vs Serial-MRV)",
+        "Backtracking-Frontier": "Algorithm A — Backtracking (OMP-Frontier vs Serial-MRV)",
         "DLX": "Algorithm B — DLX (DLX-OMP vs DLX Serial)",
     }
 
@@ -234,15 +251,17 @@ def plot_runtime_vs_threads(df):
     families = {
         "Backtracking": ("Serial", "OpenMP"),
         "Backtracking-MRV": ("Serial-MRV", "OpenMP"),
+        "Backtracking-Frontier": ("Serial-MRV", "OMP-Frontier"),
         "DLX": ("DLX", "DLX-OMP"),
     }
     subtitles = {
         "Backtracking": "Algorithm A — Backtracking",
         "Backtracking-MRV": "Algorithm A — Backtracking (MRV baseline)",
+        "Backtracking-Frontier": "Algorithm A — Backtracking (Frontier vs Serial-MRV)",
         "DLX": "Algorithm B — DLX",
     }
 
-    fig, axes = plt.subplots(1, 3, figsize=(21, 5), sharey=False)
+    fig, axes = plt.subplots(1, 4, figsize=(28, 5), sharey=False)
 
     for ax, (family, (s_alg, p_alg)) in zip(axes, families.items()):
         for diff in DIFFICULTIES:
@@ -287,6 +306,7 @@ def plot_runtime_distribution(df):
     all_configs = (
             ["Serial", "Serial-MRV", "DLX"]
             + [f"OpenMP-{t}" for t in THREAD_COUNTS]
+            + [f"OMP-Frontier-{t}" for t in THREAD_COUNTS]
             + [f"DLX-OMP-{t}" for t in THREAD_COUNTS]
     )
     configs = [c for c in all_configs if c in df["Config"].unique()]
@@ -358,11 +378,12 @@ def plot_efficiency_heatmap(speedup_df):
         print("  Skipped — no speedup data.")
         return
 
-    families = [f for f in ["Backtracking", "Backtracking-MRV", "DLX"]
+    families = [f for f in ["Backtracking", "Backtracking-MRV", "Backtracking-Frontier", "DLX"]
                 if f in speedup_df["Family"].values]
     subtitles = {
         "Backtracking": "Algorithm A — Backtracking",
         "Backtracking-MRV": "Algorithm A — Backtracking (MRV baseline)",
+        "Backtracking-Frontier": "Algorithm A — Backtracking (Frontier)",
         "DLX": "Algorithm B — DLX",
     }
 
@@ -400,6 +421,7 @@ def plot_all_configs(df):
     all_configs = (
             ["Serial", "Serial-MRV", "DLX"]
             + [f"OpenMP-{t}" for t in THREAD_COUNTS]
+            + [f"OMP-Frontier-{t}" for t in THREAD_COUNTS]
             + [f"DLX-OMP-{t}" for t in THREAD_COUNTS]
     )
     configs = [c for c in all_configs if c in df["Config"].unique()]
@@ -447,15 +469,17 @@ def plot_cost_vs_threads(df):
     families = {
         "Backtracking": ("Serial", "OpenMP"),
         "Backtracking-MRV": ("Serial-MRV", "OpenMP"),
+        "Backtracking-Frontier": ("Serial-MRV", "OMP-Frontier"),
         "DLX": ("DLX", "DLX-OMP"),
     }
     subtitles = {
         "Backtracking": "Algorithm A — Backtracking",
         "Backtracking-MRV": "Algorithm A — Backtracking (MRV baseline)",
+        "Backtracking-Frontier": "Algorithm A — Backtracking (Frontier vs Serial-MRV)",
         "DLX": "Algorithm B — DLX",
     }
 
-    fig, axes = plt.subplots(1, 3, figsize=(21, 5))
+    fig, axes = plt.subplots(1, 4, figsize=(28, 5))
 
     for ax, (family, (s_alg, p_alg)) in zip(axes, families.items()):
         for diff in DIFFICULTIES:
@@ -571,6 +595,7 @@ def save_summary_table(df, speedup_df):
 
     config_order = (
             ["Serial", "Serial-MRV"] + [f"OpenMP-{t}" for t in THREAD_COUNTS]
+            + [f"OMP-Frontier-{t}" for t in THREAD_COUNTS]
             + ["DLX"] + [f"DLX-OMP-{t}" for t in THREAD_COUNTS]
     )
     summary["Config"] = pd.Categorical(summary["Config"], categories=config_order, ordered=True)
