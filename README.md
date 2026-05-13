@@ -1,19 +1,20 @@
 # PDC-FinalProject — Parallel Sudoku Solver
 
 CS 5350 Parallel and Distributed Computing  
-Performance study comparing five Sudoku solving implementations across four difficulty levels.
+Performance study comparing six Sudoku solving implementations across four difficulty levels.
 
 ---
 
 ## Algorithms
 
-| Name       | Algorithm                   | Description                                    |
-|------------|-----------------------------|------------------------------------------------|
-| Serial     | Backtracking                | Brute-force serial baseline                    |
-| Serial-MRV | Backtracking + MRV          | Serial with Minimum Remaining Values heuristic |
-| OpenMP     | Backtracking + MRV          | Parallel tree search via OpenMP task spawning  |
-| DLX        | Dancing Links (Algorithm X) | Exact cover serial solver                      |
-| DLX-OMP    | Dancing Links + OpenMP      | DLX with parallel candidate evaluation         |
+| Name         | Algorithm                   | Description                                                         |
+|--------------|-----------------------------|---------------------------------------------------------------------|
+| Serial       | Backtracking                | Brute-force serial baseline                                         |
+| Serial-MRV   | Backtracking + MRV          | Serial with Minimum Remaining Values heuristic                      |
+| OpenMP       | Backtracking + MRV          | Parallel tree search via OpenMP task spawning                       |
+| OMP-Frontier | Backtracking + MRV          | Parallel frontier expansion — tasks seeded from Serial-MRV baseline |
+| DLX          | Dancing Links (Algorithm X) | Exact cover serial solver                                           |
+| DLX-OMP      | Dancing Links + OpenMP      | DLX with parallel candidate evaluation                              |
 
 All solvers implement the same `Solver` interface and are driven by `BenchmarkRunner`, which writes results to a
 timestamped CSV.
@@ -75,18 +76,18 @@ The binary runs the full benchmark suite automatically:
 ./build/PDC_FinalProject
 ```
 
-This benchmarks all five solver configurations against 100 puzzles per difficulty level (Easy, Medium, Hard, Extreme)
+This benchmarks all six solver configurations against 100 puzzles per difficulty level (Easy, Medium, Hard, Extreme)
 with 5 repetitions each, using thread counts of 4, 8, and 16 for the parallel solvers.
 
 Output CSV is written to `results/results_YYYYMMDD_HHMMSS.csv`.
 
 ### Configuration (edit top of `src/Benchmark/BenchmarkRunner.cpp`)
 
-| Constant               | Default                        | Meaning                                      |
-|------------------------|--------------------------------|----------------------------------------------|
-| `OPENMP_THREAD_COUNTS` | `{4, 8, 16}`                   | Thread counts for OpenMP and DLX-OMP solvers |
-| `REPETITIONS`          | `5`                            | Timed repetitions per puzzle per config      |
-| `puzzleCount`          | `100` (passed from `main.cpp`) | Puzzles loaded per difficulty level          |
+| Constant               | Default                        | Meaning                                                     |
+|------------------------|--------------------------------|-------------------------------------------------------------|
+| `OPENMP_THREAD_COUNTS` | `{4, 8, 16}`                   | Thread counts for OpenMP, OMP-Frontier, and DLX-OMP solvers |
+| `REPETITIONS`          | `5`                            | Timed repetitions per puzzle per config                     |
+| `puzzleCount`          | `100` (passed from `main.cpp`) | Puzzles loaded per difficulty level                         |
 
 ---
 
@@ -112,6 +113,7 @@ Speedup is computed within each algorithm family:
 
 - **Backtracking**: OpenMP vs Serial
 - **Backtracking-MRV**: OpenMP vs Serial-MRV
+- **Backtracking-Frontier**: OMP-Frontier vs Serial-MRV
 - **DLX**: DLX-OMP vs DLX serial
 
 ---
@@ -133,6 +135,7 @@ Speedup is computed within each algorithm family:
 │   │   ├── SerialSolver/                 # Brute-force backtracking (serial)
 │   │   ├── SerialMRVSolver/              # Backtracking with MRV heuristic (serial)
 │   │   ├── OpenMPSolver/                 # Parallel backtracking + MRV via OpenMP tasks
+│   │   ├── OpenMPFrontierSolver/         # Parallel frontier expansion via OpenMP tasks
 │   │   └── DLXSolver/                    # Dancing Links exact cover (serial + OpenMP)
 │   ├── CorrectnessChecker/               # Validates solved board against Sudoku rules
 │   ├── SudokuBoard/
