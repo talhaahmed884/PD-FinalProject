@@ -34,6 +34,9 @@ private:
     static vector<BenchmarkResult> benchmarkOpenMP(const Board &board, const string &boardId,
                                                    const string &difficulty, int threads);
 
+    static vector<BenchmarkResult> benchmarkOpenMPFrontier(const Board &board, const string &boardId,
+                                                           const string &difficulty, int threads);
+
     static vector<BenchmarkResult> benchmarkDLX(const Board &board, const string &boardId,
                                                 const string &difficulty);
 
