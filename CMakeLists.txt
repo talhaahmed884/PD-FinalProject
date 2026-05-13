@@ -19,6 +19,8 @@ add_executable(PDC_FinalProject src/main.cpp
         src/BoardSolver/SerialMRVSolver/SerialMRVSolver.h
         src/BoardSolver/OpenMPSolver/OpenMPSolver.cpp
         src/BoardSolver/OpenMPSolver/OpenMPSolver.h
+        src/BoardSolver/OpenMPFrontierSolver/OpenMPFrontierSolver.cpp
+        src/BoardSolver/OpenMPFrontierSolver/OpenMPFrontierSolver.h
         src/BoardSolver/DLXSolver/DLXSolver.cpp
         src/BoardSolver/DLXSolver/DLXSolver.h
         src/CorrectnessChecker/CorrectnessChecker.cpp

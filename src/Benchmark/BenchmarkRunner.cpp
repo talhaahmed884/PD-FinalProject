@@ -3,6 +3,7 @@
 #include "../BoardSolver/SerialSolver/SerialSolver.h"
 #include "../BoardSolver/SerialMRVSolver/SerialMRVSolver.h"
 #include "../BoardSolver/OpenMPSolver/OpenMPSolver.h"
+#include "../BoardSolver/OpenMPFrontierSolver/OpenMPFrontierSolver.h"
 #include "../BoardSolver/DLXSolver/DLXSolver.h"
 #include "../CorrectnessChecker/CorrectnessChecker.h"
 
@@ -102,6 +103,13 @@ void BenchmarkRunner::runBenchmarks(const string &outputDir, const int puzzleCou
             }
 
             for (const int t: OPENMP_THREAD_COUNTS) {
+                for (const auto &r: benchmarkOpenMPFrontier(boards[i], boardId, diff.name, t)) {
+                    printRow(r);
+                    results.push_back(r);
+                }
+            }
+
+            for (const int t: OPENMP_THREAD_COUNTS) {
                 for (const auto &r: benchmarkOpenMP(boards[i], boardId, diff.name, t)) {
                     printRow(r);
                     results.push_back(r);
@@ -173,8 +181,31 @@ vector<BenchmarkResult> BenchmarkRunner::benchmarkOpenMP(const Board &board, con
     return results;
 }
 
+vector<BenchmarkResult> BenchmarkRunner::benchmarkOpenMPFrontier(const Board &board, const string &boardId,
+                                                                 const string &difficulty, const int threads) {
+    OpenMPFrontierSolver solver(threads);
+    vector<BenchmarkResult> results;
+    results.reserve(REPETITIONS);
+
+    for (int rep = 1; rep <= REPETITIONS; rep++) {
+        Board copy = board;
+#ifdef _OPENMP
+        const double start = omp_get_wtime();
+        solver.solve(copy);
+        const double timeSec = omp_get_wtime() - start;
+#else
+        const auto start = chrono::high_resolution_clock::now();
+        solver.solve(copy);
+        const double timeSec = chrono::duration<double>(chrono::high_resolution_clock::now() - start).count();
+#endif
+        const int correct = CorrectnessChecker::check(copy) ? 1 : 0;
+        results.push_back({boardId, difficulty, "OMP-Frontier", threads, rep, timeSec, correct});
+    }
+    return results;
+}
+
 vector<BenchmarkResult> BenchmarkRunner::benchmarkDLX(const Board &board, const string &boardId,
-                                                      const string &difficulty) {
+                                                       const string &difficulty) {
     DLXSolver solver;
     vector<BenchmarkResult> results;
     results.reserve(REPETITIONS);
